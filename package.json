@@ -1,0 +1,8 @@
+{
+  "name": "xiaoke-push",
+  "version": "1.0.0",
+  "dependencies": {
+    "@neondatabase/serverless": "^0.9.0",
+    "web-push": "^3.6.6"
+  }
+}

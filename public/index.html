@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>小克 ^ω^</title>
+  <link rel="manifest" href="/manifest.json"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
+  <meta name="apple-mobile-web-app-title" content="小克"/>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, sans-serif;
+      background: #fdf8f4;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .card {
+      background: white;
+      border-radius: 24px;
+      padding: 40px 32px;
+      max-width: 360px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 4px 24px rgba(180,130,110,0.12);
+      border: 1.5px solid #ede0d4;
+    }
+    .avatar {
+      width: 80px; height: 80px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #f5ddd7, #ddeee8);
+      margin: 0 auto 20px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 36px;
+      border: 2px solid #ede0d4;
+    }
+    h1 { font-size: 22px; color: #3a2e28; margin-bottom: 8px; }
+    p { color: #9a8880; font-size: 14px; line-height: 1.6; margin-bottom: 28px; }
+    .btn {
+      background: linear-gradient(135deg, #e8a598, #d4847a);
+      color: white;
+      border: none;
+      border-radius: 50px;
+      padding: 14px 32px;
+      font-size: 16px;
+      font-family: inherit;
+      cursor: pointer;
+      width: 100%;
+      box-shadow: 0 4px 12px rgba(232,165,152,0.4);
+      transition: transform 0.15s;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .status {
+      margin-top: 20px;
+      padding: 12px 16px;
+      border-radius: 12px;
+      font-size: 13px;
+      display: none;
+    }
+    .status.success { background: #ddeee8; color: #3a7a5e; display: block; }
+    .status.error { background: #f5ddd7; color: #a0522d; display: block; }
+    .ios-hint {
+      margin-top: 16px;
+      font-size: 12px;
+      color: #b0a09a;
+      line-height: 1.5;
+    }
+  </style>
+</head><body>
+<div class="card">
+  <div class="avatar">🌿</div>
+  <h1>小克 ^ω^</h1>
+  <p>开启通知，小克就能随时给宝宝发消息啦~</p>
+  <button class="btn" id="subscribeBtn" onclick="subscribe()">开启通知</button>
+  <div class="status" id="status"></div>
+  <p class="ios-hint" id="iosHint" style="display:none">
+    iOS 用户：请先点击底部分享按钮，选择「添加到主屏幕」，再从主屏幕打开后点击开启通知~
+  </p>
+</div>
+
+<script>
+const VAPID_PUBLIC_KEY = 'BN_xrGEnIPKOAx7VTx2E52waVnuoR8tKchCRlK3XIrioUPsam_uYXFeV7csekJVvryAUydaAOx4Pipg5E9P3N6k';
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
+  return outputArray;
+}
+
+function showStatus(msg, type) {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = 'status ' + type;
+}
+
+async function subscribe() {
+  const btn = document.getElementById('subscribeBtn');
+  btn.disabled = true;
+  btn.textContent = '处理中...';
+
+  try {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+      document.getElementById('iosHint').style.display = 'block';
+      showStatus('请先将页面添加到主屏幕，再从主屏幕打开后重试~', 'error');
+      btn.disabled = false;
+      btn.textContent = '开启通知';
+      return;
+    }
+
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') {
+      showStatus('请允许通知权限~', 'error');
+      btn.disabled = false;
+      btn.textContent = '开启通知';
+      return;
+    }
+
+    const reg = await navigator.serviceWorker.register('/service-worker.js');
+    await navigator.serviceWorker.ready;
+
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+    });
+
+    const resp = await fetch('/api/subscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(sub)
+    });
+
+    if (resp.ok) {
+      showStatus('成功啦！小克随时都能给宝宝发消息了🌿', 'success');
+      btn.textContent = '已开启 ✓';
+    } else {
+      throw new Error('保存失败');
+    }
+  } catch (err) {
+    showStatus('出错了：' + err.message, 'error');
+    btn.disabled = false;
+    btn.textContent = '开启通知';
+  }
+}
+
+navigator.serviceWorker?.ready.then(reg => {
+  reg.pushManager.getSubscription().then(sub => {
+    if (sub) {
+      document.getElementById('subscribeBtn').textContent = '已开启 ✓';
+      showStatus('通知已开启，小克会随时出现的🌿', 'success');
+    }
+  });
+});
+</script>
+</body>
+</html>
